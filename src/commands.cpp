@@ -176,10 +176,8 @@ int runLs(const vector<string>& args) {
                 cout << (pw ? pw->pw_name : "?") << " ";
                 cout << (gr ? gr->gr_name : "?") << " ";
 
-                // file size
                 cout << setw(6) << st.st_size << " ";
 
-                // file name
                 cout << name << "  ";
             }
             else {
@@ -322,22 +320,26 @@ void runIOredir(const vector<string>& args) {
             inFile = (i + 1 >= args.size()) ? "" : args[i + 1];
             if (inFile == "") handleError("I/O Redirection", "No Input file provided");
             in_fd = open(inFile.c_str(), O_RDONLY);
+            
             if (in_fd < 0) handleError("I/O Redirection", "Unable to open Input file");
             i++;
         } 
-        else if (args[i] == ">" || args[i] == ">>") {
+
+        else if (args[i] ==">" || args[i] == ">>") {
             outFile = (i + 1 >= args.size()) ? "" : args[i + 1];
             if (outFile == "") handleError("I/O Redirection", "No Output file provided");
 
-            if (args[i] == ">") 
+            if (args[i]== ">") 
                 out_fd = open(outFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
             else 
                 out_fd = open(outFile.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
 
-            if (out_fd < 0) handleError("I/O Redirection", "Unable to open Output file");
+            if (out_fd< 0) handleError("I/O Redirection", "Unable to open Output file");
             i++;
+
         } 
         else exec_args.push_back(strdup(args[i].c_str()));
+
     }
     exec_args.push_back(nullptr);
 
