@@ -3,6 +3,7 @@
 #include <iostream>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <signal.h>
 
 using namespace std;
 
@@ -15,6 +16,9 @@ char** autofill(const char* prefix, int start, int end){
 
 
 int main() {
+
+    signal(SIGINT, checkSignalInt);  
+    signal(SIGTSTP, checkSignalStp);
 
     // Autofill
     rl_attempted_completion_function = autofill;

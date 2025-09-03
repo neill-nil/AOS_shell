@@ -57,11 +57,19 @@ void runCommand(vector<string> &args, string fullCmd) {
     }
 
     bool ioflag = false;
+    bool pipeflag= false;
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i]=="<" || args[i]==">" || args[i]==">>") ioflag=true;
+        else if (args[i]=="|") pipeflag=true;
     }
     if(ioflag){
         runIOredir(args);
+    }
+    else if(pipeflag){
+        runPipeline(args);
+    }
+    else if(backgroundCmd){
+        runBG(args);
     }
     else if (cmd == "cd") {
         runCd(args);
@@ -74,10 +82,6 @@ void runCommand(vector<string> &args, string fullCmd) {
     }
     else if (cmd == "ls") {
         runLs(args);
-        cout<<"\n";
-    }
-    else if (cmd == "gedit") {
-        runGedit(args, backgroundCmd);
         cout<<"\n";
     }
     else if (cmd == "pinfo") {

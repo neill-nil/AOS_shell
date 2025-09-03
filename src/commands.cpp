@@ -19,6 +19,8 @@ using namespace std;
 
 const int MAX_PATH_LEN = 1000;
 
+extern pid_t fg_pid;  
+
 string prevDir; // keeping track of previous directory
 
 int runEcho(const vector<string>& args) {
@@ -193,37 +195,32 @@ int runLs(const vector<string>& args) {
 }
 
 
-void runGedit(const vector<string>& args, bool bg){
-    
+void runBG(const vector<string>& args) {
     pid_t pid = fork();
-    if (pid==-1){
+    if (pid < 0) {
         handleError("fork");
+        return;
     }
 
-    vector<char *> cargs;
-    for (auto &a:args){
-        cargs.push_back(const_cast<char *>(a.c_str()));
-    }
-    cargs.push_back(nullptr);
+    if (pid == 0) {
+        // Child process
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
 
-    //child process
-    if(pid==0){
-        execvp("gedit", cargs.data());
-        handleError("execvp");
+        vector<char*> cargs;
+        for (auto &a : args) {
+            cargs.push_back(const_cast<char*>(a.c_str()));
+        }
+        cargs.push_back(nullptr);
+        setpgid(0, 0); 
+
+        execvp(cargs[0], cargs.data());
+        perror("execvp"); 
         _exit(1);
+    } 
+    else {
+        cout << "PID: " << pid << "\n";
     }
-    else{
-        if(bg){
-            cout<<"PID: "<<pid<<"\n";
-        }
-        else{
-            int status;
-            waitpid(pid, &status, 0);
-        }
-    }
-    return;
-
-
 }
 
 void runPinfo(const vector<string> &args){
@@ -313,58 +310,148 @@ bool runSearch(const string &filename, const string &path){
 
 }
 
-void runIOredir(const vector<string>& args){
+void runIOredir(const vector<string>& args) {
     string mainCmd = args[0];
     string outFile;
     string inFile;
-    int in_fd=-1, out_fd=-1;
-    
+    int in_fd = -1, out_fd = -1;
+
     vector<char*> exec_args;
-    for (size_t i = 0; i < args.size(); i++){
-        if (args[i]=="<"){
-            inFile = (i + 1 >= args.size())?"": args[i+1];
-            if (inFile=="") handleError("I/O Redirection", "No Input file provided");
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i] == "<") {
+            inFile = (i + 1 >= args.size()) ? "" : args[i + 1];
+            if (inFile == "") handleError("I/O Redirection", "No Input file provided");
             in_fd = open(inFile.c_str(), O_RDONLY);
-            if (in_fd<0) handleError("I/O Redirection", "Unable to open Input file");
+            if (in_fd < 0) handleError("I/O Redirection", "Unable to open Input file");
             i++;
+        } 
+        else if (args[i] == ">" || args[i] == ">>") {
+            outFile = (i + 1 >= args.size()) ? "" : args[i + 1];
+            if (outFile == "") handleError("I/O Redirection", "No Output file provided");
 
-        }
-        else if(args[i]==">" || args[i]==">>"){
-            outFile = (i + 1 >= args.size())?"": args[i+1];
-            if (outFile=="") handleError("I/O Redirection", "No Output file provided");
+            if (args[i] == ">") 
+                out_fd = open(outFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            else 
+                out_fd = open(outFile.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
 
-            if (args[i]==">") out_fd = open(outFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            else out_fd = open(outFile.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
-            
-            if (out_fd<0) handleError("I/O Redirection", "Unable to open Output file");
+            if (out_fd < 0) handleError("I/O Redirection", "Unable to open Output file");
             i++;
-        }
+        } 
         else exec_args.push_back(strdup(args[i].c_str()));
-        
     }
     exec_args.push_back(nullptr);
 
     pid_t pid = fork();
 
-    // Execute inside child process
-    if (pid==0){
-        if (in_fd!=-1){
+    if (pid == 0) {
+        // ---- Child ----
+        setpgid(0, 0);               // put child in its own process group
+        signal(SIGINT, SIG_DFL);     // restore default signals
+        signal(SIGTSTP, SIG_DFL);
+
+        if (in_fd != -1) {
             dup2(in_fd, STDIN_FILENO);
             close(in_fd);
         }
-        if (out_fd!=-1){
+        if (out_fd != -1) {
             dup2(out_fd, STDOUT_FILENO);
             close(out_fd);
         }
+
         execvp(mainCmd.c_str(), exec_args.data());
         _exit(1);
-    }
-    else if (pid>0){
-        wait(nullptr);
-    }
+    } 
+    else if (pid > 0) {
+        fg_pid = pid; 
+        setpgid(pid, pid); 
+
+        int status;
+        waitpid(-pid, &status, WUNTRACED); 
+        fg_pid = -1;
+    } 
     else handleError("I/O Redirection");
 
     for (char* arg : exec_args) free(arg);
+}
+
+
+void runPipeline(const vector<string>& args) {
+    // Re-tokenize by "|"
+    vector<vector<string>> cmds;
+    vector<string> current;
+    for (auto &arg : args) {
+        if (arg == "|") {
+            if (!current.empty()) {
+                cmds.push_back(current);
+                current.clear();
+            }
+        } else {
+            current.push_back(arg);
+        }
+    }
+    if (!current.empty()) cmds.push_back(current);
+
+    int pipes = cmds.size();
+    if (pipes == 0) return;
+
+    vector<int> pipefds(2 * (pipes - 1));
+    for (int i = 0; i < pipes - 1; i++) {
+        if (pipe(pipefds.data() + 2 * i) < 0) {
+            handleError("pipeline");
+            return;
+        }
+    }
+
+    pid_t pgid = -1;
+    for (int i = 0; i < pipes; i++) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            handleError("pipeline");
+            return;
+        }
+
+        if (pid == 0) {
+            signal(SIGINT, SIG_DFL);  
+            signal(SIGTSTP, SIG_DFL);
+
+            if (i == 0) setpgid(0, 0);       
+            else setpgid(0, pgid);     
+
+            if (i > 0) dup2(pipefds[(i - 1) * 2], STDIN_FILENO);
+            if (i < pipes - 1) dup2(pipefds[i * 2 + 1], STDOUT_FILENO);
+
+            for (int j = 0; j < 2 * (pipes - 1); j++) close(pipefds[j]);
+
+            vector<char*> cargs;
+            for (auto &s : cmds[i]) cargs.push_back(strdup(s.c_str()));
+            cargs.push_back(nullptr);
+
+            execvp(cargs[0], cargs.data());
+            handleError("execvp");
+            _exit(1);
+        } 
+        else { 
+            if (i == 0) {
+                pgid = pid;   
+                setpgid(pid, pgid);
+                fg_pid = pgid;  
+            } else {
+                setpgid(pid, pgid);
+            }
+        }
+    }
+
+    for (int j = 0; j < 2 * (pipes - 1); j++) close(pipefds[j]);
+
+    int status;
+    while (waitpid(-pgid, &status, WUNTRACED) > 0) {
+        if (WIFSTOPPED(status)) {
+            cout << "\nPipeline stopped\n";
+            break;
+        }
+    }
+
+    fg_pid = -1;
 }
 
 

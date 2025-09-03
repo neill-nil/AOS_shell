@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <signal.h>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -11,6 +12,21 @@ using namespace std;
 
 const char* home = getenv("HOME");
 string historyFile = string(home) + "/.customshell_history";
+
+pid_t fg_pid = -1;  
+
+void checkSignalInt(int signo) {
+    if (fg_pid > 0) {
+        kill(-fg_pid, SIGINT); 
+    }
+}
+
+void checkSignalStp(int signo) {
+    if (fg_pid > 0) {
+        kill(-fg_pid, SIGTSTP); 
+        cout << "\nProcess " << fg_pid << " stopped\n";
+    }
+}
 
 
 void handleError(const string &cmd, const string &customMsg = "Not found") {
