@@ -1,0 +1,6 @@
+.vscode/
+commands.o
+dispatcher.o
+main.o
+utils.o
+CustomShell
