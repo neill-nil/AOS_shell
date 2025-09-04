@@ -1,5 +1,6 @@
 #include <dispatcher.hpp>
 #include <utils.hpp>
+#include "global.hpp"
 #include <iostream>
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -20,8 +21,13 @@ int main() {
     signal(SIGINT, checkSignalInt);  
     signal(SIGTSTP, checkSignalStp);
 
+    initShellRoot();
+
     // Autofill
     rl_attempted_completion_function = autofill;
+
+    using_history();  
+    read_history(historyFile.c_str());
 
     while (true) {
         // Getting user details like user, hostname and cwd
@@ -39,7 +45,10 @@ int main() {
 
         string givenCmdstr = givenCmd;
 
-        if (!givenCmdstr.empty()) add_history(givenCmd);
+        if (!givenCmdstr.empty()) {
+            add_history(givenCmd);
+            append_history(1, historyFile.c_str());
+        }
         free(givenCmd);
 
         vector<string> commands = splitCommands(givenCmdstr);
@@ -50,5 +59,6 @@ int main() {
             runCommand(args, cmd);
         }
     }
+    write_history(historyFile.c_str());
     return 0;
 }

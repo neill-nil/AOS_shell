@@ -6,4 +6,5 @@ using namespace std;
 
 string getShellPrompt();
 void runCommand(vector<string> &args, string fullCmd);
+void initShellRoot();
 

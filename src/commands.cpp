@@ -145,9 +145,9 @@ int runLs(const vector<string>& args) {
             continue;
         }
 
-        if (paths.size() > 1) {
-            cout << path << "  ";
-        }
+        // if (paths.size() > 1) {
+        //     cout << path << "  ";
+        // }
 
         struct dirent* entry;
         while ((entry = readdir(dir)) != nullptr) {
@@ -167,7 +167,6 @@ int runLs(const vector<string>& args) {
                 printPermissions(st.st_mode);
                 cout << " ";
 
-                // hard links
                 cout << setw(2) << st.st_nlink << " ";
 
                 // owner and group
@@ -176,12 +175,17 @@ int runLs(const vector<string>& args) {
                 cout << (pw ? pw->pw_name : "?") << " ";
                 cout << (gr ? gr->gr_name : "?") << " ";
 
-                cout << setw(6) << st.st_size << " ";
+                cout << setw(7) << st.st_size << " ";
 
-                cout << name << "  ";
+                char timebuf[80];
+                struct tm* tm_info = localtime(&st.st_mtime);
+                strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", tm_info);
+                cout << timebuf << " ";
+
+                cout << name << "\n";
             }
             else {
-                cout << name << "  ";
+                cout << name << "\n";
             }
         }
         closedir(dir);
@@ -346,9 +350,9 @@ void runIOredir(const vector<string>& args) {
     pid_t pid = fork();
 
     if (pid == 0) {
-        // ---- Child ----
-        setpgid(0, 0);               // put child in its own process group
-        signal(SIGINT, SIG_DFL);     // restore default signals
+
+        setpgid(0, 0);
+        signal(SIGINT, SIG_DFL); 
         signal(SIGTSTP, SIG_DFL);
 
         if (in_fd != -1) {
@@ -419,8 +423,12 @@ void runPipeline(const vector<string>& args) {
             if (i == 0) setpgid(0, 0);       
             else setpgid(0, pgid);     
 
-            if (i > 0) dup2(pipefds[(i - 1) * 2], STDIN_FILENO);
-            if (i < pipes - 1) dup2(pipefds[i * 2 + 1], STDOUT_FILENO);
+            if (i > 0) {
+                dup2(pipefds[(i - 1) * 2], STDIN_FILENO);
+            }
+            if (i < pipes - 1) {
+                dup2(pipefds[i * 2 + 1], STDOUT_FILENO);
+            }
 
             for (int j = 0; j < 2 * (pipes - 1); j++) close(pipefds[j]);
 
@@ -458,7 +466,6 @@ void runPipeline(const vector<string>& args) {
 
 
 void runHistory(const vector<string>& args){
-
     
 
     int hist_fd = open(historyFile.c_str(), O_RDONLY);

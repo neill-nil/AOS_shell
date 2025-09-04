@@ -10,6 +10,7 @@
 using namespace std;
 
 
+string shellRoot;
 
 string getHost() {
         char buffer[HOST_NAME_MAX];
@@ -20,15 +21,21 @@ string getHost() {
 }
 
 
-string getShellPrompt() {
+void initShellRoot() {
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd))) {
+        shellRoot = string(cwd);
+    } else {
+        shellRoot = "/";
+    }
+}
 
+string getShellPrompt() {
     struct passwd *pw = getpwuid(getuid());
     string user = (pw ? pw->pw_name : "unknown");
 
-
     string host = getHost();
 
-    // Get current working directory
     char cwd[PATH_MAX];
     string cwd_str;
     if (getcwd(cwd, sizeof(cwd))) {
@@ -37,11 +44,15 @@ string getShellPrompt() {
         cwd_str = "?";
     }
 
+    if (cwd_str == shellRoot) {
+        cwd_str = "~";
+    } 
+
     string red   = "\033[1;31m";
     string blue  = "\033[1;34m";
     string reset = "\033[0m";
-    
-    string prompt = red + user + "@" + host + reset + ":" + blue + cwd_str + reset + "$ ";
+
+    string prompt = red + user + "@" + host + reset + ":" + blue + cwd_str + reset + "> ";
     return prompt;
 }
 
@@ -102,7 +113,7 @@ void runCommand(vector<string> &args, string fullCmd) {
         runHistory(args);
         cout<<"\n";
     }
-    else if (cmd == "exit") { // change exit call
+    else if (cmd == "exit") { 
         exit(0);
     }
     else {
